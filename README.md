@@ -17,7 +17,7 @@ O Compose inicia o PostgreSQL, executa `alembic upgrade head` no serviço `migra
 - Contrato OpenAPI: `http://localhost:8000/openapi.json`.
 - Saúde: `http://localhost:8000/up` — verifica se a aplicação responde, sem consultar o banco.
 
-O PostgreSQL fica disponível em `localhost:5432`, com as credenciais do `.env`. Dentro do Docker, a API usa o host `db`. O volume `postgres_data` preserva os dados ao parar os containers. As credenciais de exemplo destinam-se a desenvolvimento local.
+O PostgreSQL fica disponível em `localhost:5433`, com as credenciais do `.env`. Dentro do Docker, a API usa o host `db`. O volume `postgres_data` preserva os dados ao parar os containers. As credenciais de exemplo destinam-se a desenvolvimento local.
 
 ```powershell
 docker compose logs -f app migrate

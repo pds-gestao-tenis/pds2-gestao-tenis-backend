@@ -1,9 +1,11 @@
+from collections.abc import Sequence
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models import UserModel
-from app.domain.entities import User, UserCredentials
+from app.domain.entities import Person, User, UserCredentials
 from app.domain.exceptions import DuplicateEmailError
 
 
@@ -45,3 +47,12 @@ class SqlAlchemyUserRepository:
             if getattr(error.orig, "sqlstate", None) == "23505" and constraint == "uq_users_email":
                 raise DuplicateEmailError from None
             raise
+
+    def search(self, term: str, *, exclude_id: int, limit: int) -> Sequence[Person]:
+        rows = self.session.execute(
+            select(UserModel.id, UserModel.name)
+            .where(UserModel.name.icontains(term, autoescape=True), UserModel.id != exclude_id)
+            .order_by(UserModel.name, UserModel.id)
+            .limit(limit)
+        )
+        return [Person(row.id, row.name) for row in rows]

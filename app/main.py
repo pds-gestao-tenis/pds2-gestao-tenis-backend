@@ -8,17 +8,41 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.controllers.auth import router
+from app.controllers.bookings import router as bookings_router
+from app.controllers.courts import router as courts_router
 from app.controllers.members import router as members_router
+from app.controllers.schedule import router as schedule_router
 from app.controllers.sessions import router as sessions_router
 from app.core.config import Settings
 from app.core.rate_limit import RegistrationRateLimiter
 from app.domain.exceptions import (
     AuthenticationError,
+    BookingNotEditableError,
+    BookingNotFoundError,
+    BookingPermissionError,
+    CourtInUseError,
+    CourtNotFoundError,
+    CourtUnderMaintenanceError,
+    DuplicateBookingError,
+    DuplicateCourtNameError,
     DuplicateEmailError,
     DuplicateMemberEmailError,
     ForbiddenError,
+    InvalidBookingError,
     InvalidCredentialsError,
+    MaintenanceConflictError,
+    MaintenanceNotFoundError,
     MemberNotFoundError,
+    OrganizerAttendanceError,
+    SlotUnavailableError,
+)
+
+PRIVATE_PREFIXES = (
+    "/api/v1/members",
+    "/api/v1/courts",
+    "/api/v1/bookings",
+    "/api/v1/schedule",
+    "/api/v1/players",
 )
 
 
@@ -36,8 +60,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application = FastAPI(
         title="Clube de Tênis API",
-        version="0.3.0",
-        description="US01 — cadastro. US02 — login/logout. US03 — membros gerenciados por admin.",
+        version="0.4.0",
+        description=(
+            "US01 — cadastro. US02 — login/logout. US03 — membros gerenciados por admin. "
+            "US04 — Quadras (admin) e US06 — agenda com fila de espera."
+        ),
         lifespan=lifespan,
     )
     application.state.settings = settings
@@ -67,8 +94,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
         if response is None:
             response = await call_next(request)
-        if path in {"/api/v1/auth/login", "/api/v1/auth/logout", "/api/v1/auth/me"} or (
-            path == "/api/v1/members" or path.startswith("/api/v1/members/")
+        if path in {"/api/v1/auth/login", "/api/v1/auth/logout", "/api/v1/auth/me"} or any(
+            path == prefix or path.startswith(f"{prefix}/") for prefix in PRIVATE_PREFIXES
         ):
             response.headers["Cache-Control"] = "no-store"
             response.headers["Pragma"] = "no-cache"
@@ -134,6 +161,92 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             content={"message": "Os dados informados são inválidos.", "errors": errors},
         )
 
+    def message(status_code: int, text: str, field: str | None = None) -> JSONResponse:
+        content: dict = {"message": text}
+        if field is not None:
+            content["errors"] = {field: [text]}
+        return JSONResponse(status_code=status_code, content=content)
+
+    @application.exception_handler(CourtNotFoundError)
+    async def court_not_found(request: Request, error: CourtNotFoundError) -> JSONResponse:
+        return message(404, "Quadra não encontrada.")
+
+    @application.exception_handler(DuplicateCourtNameError)
+    async def duplicate_court(request: Request, error: DuplicateCourtNameError) -> JSONResponse:
+        return message(409, "Já existe uma quadra com este nome.", "name")
+
+    @application.exception_handler(CourtInUseError)
+    async def court_in_use(request: Request, error: CourtInUseError) -> JSONResponse:
+        return message(
+            409,
+            "A quadra tem reservas ou pedidos na fila que ainda não terminaram. "
+            "Cancele-os antes de excluir.",
+        )
+
+    @application.exception_handler(CourtUnderMaintenanceError)
+    async def under_maintenance(
+        request: Request, error: CourtUnderMaintenanceError
+    ) -> JSONResponse:
+        return message(409, "Essa quadra está em manutenção nesse horário.", "starts_at")
+
+    @application.exception_handler(MaintenanceNotFoundError)
+    async def maintenance_not_found(
+        request: Request, error: MaintenanceNotFoundError
+    ) -> JSONResponse:
+        return message(404, "Manutenção não encontrada.")
+
+    @application.exception_handler(MaintenanceConflictError)
+    async def maintenance_conflict(
+        request: Request, error: MaintenanceConflictError
+    ) -> JSONResponse:
+        return message(
+            409,
+            # Mostrada ao usuário; a documentação da rota explica o cancel_bookings.
+            f"Há {error.count} reserva(s) ou pedido(s) na fila nesse período.",
+            "cancel_bookings",
+        )
+
+    @application.exception_handler(BookingNotFoundError)
+    async def booking_not_found(request: Request, error: BookingNotFoundError) -> JSONResponse:
+        return message(404, "Reserva não encontrada.")
+
+    @application.exception_handler(BookingPermissionError)
+    async def booking_forbidden(request: Request, error: BookingPermissionError) -> JSONResponse:
+        return message(403, "Somente quem fez a reserva ou um administrador pode alterá-la.")
+
+    @application.exception_handler(SlotUnavailableError)
+    async def slot_unavailable(request: Request, error: SlotUnavailableError) -> JSONResponse:
+        # Mostrada ao usuário; a documentação da rota explica o join_waitlist.
+        return message(409, "Esse horário já está reservado.", "starts_at")
+
+    @application.exception_handler(OrganizerAttendanceError)
+    async def organizer_attendance(
+        request: Request, error: OrganizerAttendanceError
+    ) -> JSONResponse:
+        return message(403, "Quem organiza já está confirmado.")
+
+    @application.exception_handler(DuplicateBookingError)
+    async def duplicate_booking(request: Request, error: DuplicateBookingError) -> JSONResponse:
+        return message(
+            409,
+            "Você já tem uma reserva ou pedido na fila que se sobrepõe a este horário.",
+            "starts_at",
+        )
+
+    @application.exception_handler(BookingNotEditableError)
+    async def not_editable(request: Request, error: BookingNotEditableError) -> JSONResponse:
+        return message(409, error.message)
+
+    @application.exception_handler(InvalidBookingError)
+    async def invalid_booking(request: Request, error: InvalidBookingError) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "message": "Os dados informados são inválidos.",
+                "errors": {error.field: [error.message]},
+            },
+        )
+
     @application.get("/", include_in_schema=False)
     def index() -> RedirectResponse:
         return RedirectResponse("/docs")
@@ -145,6 +258,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(router)
     application.include_router(sessions_router)
     application.include_router(members_router)
+    application.include_router(courts_router)
+    application.include_router(bookings_router)
+    application.include_router(schedule_router)
     return application
 
 

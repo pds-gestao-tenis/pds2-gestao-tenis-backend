@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     db_host: str = "127.0.0.1"
-    db_port: int = Field(default=5432, ge=1, le=65535)
+    db_port: int = Field(default=5433, ge=1, le=65535)
     db_database: str = "clube_tenis"
     db_username: str = "clube"
     db_password: SecretStr = SecretStr("clube_local")
@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     login_rate_limit: int = Field(default=10, ge=1)
     login_rate_window_seconds: int = Field(default=60, ge=1)
     access_token_ttl_minutes: int = Field(default=60, ge=1, le=1440)
+    # A agenda do dia é montada no fuso do clube: "dia 10" começa à meia-noite daqui.
+    club_timezone: str = "America/Sao_Paulo"
 
     @property
     def database_url(self) -> URL:
