@@ -1,0 +1,64 @@
+name: CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint e testes
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: clube_tenis_test
+          POSTGRES_USER: clube_test
+          POSTGRES_PASSWORD: teste_local
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U clube_test -d clube_tenis_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      APP_ENV: testing
+      TEST_DATABASE_URL: postgresql+psycopg://clube_test:teste_local@localhost:5432/clube_tenis_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install ".[dev]"
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Testes (unitários, API e integração com PostgreSQL)
+        run: pytest
+
+  deploy:
+    name: Deploy no Render
+    needs: test
+    # Só publica o que entrou na main, e só se os testes passaram.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Disparar deploy hook
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "::error::Secret RENDER_DEPLOY_HOOK não configurado"
+            exit 1
+          fi
+          curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK" > /dev/null
+          echo "Deploy solicitado ao Render."
