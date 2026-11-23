@@ -11,6 +11,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
+    SmallInteger,
     String,
     UniqueConstraint,
     false,
@@ -28,6 +29,11 @@ class UserModel(Base):
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
         CheckConstraint("email = lower(btrim(email))", name="ck_users_email_normalized"),
+        CheckConstraint(
+            "skill_level IS NULL OR skill_level IN "
+            "('beginner', 'intermediate', 'advanced', 'competitive')",
+            name="ck_users_skill_level",
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -35,6 +41,8 @@ class UserModel(Base):
     email: Mapped[str] = mapped_column(String(254))
     password_hash: Mapped[str] = mapped_column(String(255))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # US23: nível informado pelo próprio jogador.
+    skill_level: Mapped[str | None] = mapped_column(String(12))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -162,6 +170,7 @@ class CourtMaintenanceModel(Base):
     __tablename__ = "court_maintenance"
     __table_args__ = (
         CheckConstraint("ends_at > starts_at", name="ck_court_maintenance_period"),
+        CheckConstraint("kind IN ('maintenance', 'event')", name="ck_court_maintenance_kind"),
         Index("ix_court_maintenance_court_ends_at", "court_id", "ends_at"),
     )
 
@@ -170,6 +179,8 @@ class CourtMaintenanceModel(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     reason: Mapped[str] = mapped_column(String(200))
+    # US28: o bloqueio pode ser manutenção ou evento do clube.
+    kind: Mapped[str] = mapped_column(String(12), server_default="maintenance")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -209,3 +220,22 @@ class MemberFeeModel(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class PlayerAvailabilityModel(Base):
+    """US24: dias e períodos em que o jogador costuma jogar."""
+
+    __tablename__ = "player_availability"
+    __table_args__ = (
+        CheckConstraint("weekday BETWEEN 0 AND 6", name="ck_player_availability_weekday"),
+        CheckConstraint(
+            "period IN ('morning', 'afternoon', 'evening')", name="ck_player_availability_period"
+        ),
+        Index("ix_player_availability_slot", "weekday", "period"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    weekday: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    period: Mapped[str] = mapped_column(String(10), primary_key=True)

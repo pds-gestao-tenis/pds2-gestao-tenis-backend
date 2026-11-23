@@ -54,12 +54,20 @@ from app.handlers.members import (
     UpdateMemberHandler,
 )
 from app.handlers.notifications import BookingNotifier, SendRemindersHandler
+from app.handlers.players import (
+    GetPlayerProfileHandler,
+    SuggestPartnersHandler,
+    UpdatePlayerProfileHandler,
+)
 from app.handlers.register_user import RegisterUserHandler
+from app.handlers.reports import OccupancyReportHandler
 from app.handlers.schedule import GetScheduleHandler, SearchPlayersHandler
 from app.repositories.sqlalchemy_bookings import SqlAlchemyBookingRepository
 from app.repositories.sqlalchemy_courts import SqlAlchemyCourtRepository
 from app.repositories.sqlalchemy_fees import SqlAlchemyFeeRepository
 from app.repositories.sqlalchemy_members import SqlAlchemyMemberRepository
+from app.repositories.sqlalchemy_players import SqlAlchemyPlayerProfileRepository
+from app.repositories.sqlalchemy_reports import SqlAlchemyReportRepository
 from app.repositories.sqlalchemy_sessions import SqlAlchemySessionRepository
 from app.repositories.sqlalchemy_users import SqlAlchemyUserRepository
 
@@ -297,3 +305,33 @@ get_register_payment_handler = _fee_handler(RegisterPaymentHandler)
 get_pending_members_handler = _fee_handler(PendingMembersHandler)
 get_my_fees_handler = _fee_handler(MyFeesHandler)
 get_pay_own_fee_handler = _fee_handler(PayOwnFeeHandler)
+
+
+def get_player_profile_repository(
+    session: Annotated[Session, Depends(get_session)],
+) -> SqlAlchemyPlayerProfileRepository:
+    return SqlAlchemyPlayerProfileRepository(session)
+
+
+ProfilesDependency = Annotated[
+    SqlAlchemyPlayerProfileRepository, Depends(get_player_profile_repository)
+]
+
+
+def get_player_profile_handler(profiles: ProfilesDependency) -> GetPlayerProfileHandler:
+    return GetPlayerProfileHandler(profiles)
+
+
+def get_update_player_profile_handler(profiles: ProfilesDependency) -> UpdatePlayerProfileHandler:
+    return UpdatePlayerProfileHandler(profiles)
+
+
+def get_suggest_partners_handler(profiles: ProfilesDependency) -> SuggestPartnersHandler:
+    return SuggestPartnersHandler(profiles)
+
+
+def get_occupancy_handler(
+    request: Request, session: Annotated[Session, Depends(get_session)]
+) -> OccupancyReportHandler:
+    zone = ZoneInfo(request.app.state.settings.club_timezone)
+    return OccupancyReportHandler(SqlAlchemyReportRepository(session), zone)

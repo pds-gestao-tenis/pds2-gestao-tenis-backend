@@ -206,7 +206,11 @@ def add_maintenance(
     court = handler.handle(
         court_id,
         MaintenanceData(
-            payload.starts_at, payload.ends_at, payload.reason, payload.cancel_bookings
+            payload.starts_at,
+            payload.ends_at,
+            payload.reason,
+            payload.cancel_bookings,
+            payload.kind,
         ),
     )
     # US17: quem tinha reserva no período é avisado do cancelamento.

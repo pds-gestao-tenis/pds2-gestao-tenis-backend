@@ -10,6 +10,7 @@ from app.data.members import CreateMemberData, UpdateMemberData
 from app.domain.entities import (
     Attendance,
     AuthenticatedSession,
+    Availability,
     Booking,
     BookingPage,
     BookingSlot,
@@ -25,7 +26,9 @@ from app.domain.entities import (
     MemberStatus,
     PendingMember,
     Person,
+    PlayerProfile,
     ScheduleBooking,
+    SkillLevel,
     User,
     UserCredentials,
 )
@@ -184,3 +187,13 @@ class FeeRepository(Protocol):
     def pending_members(self, today: date) -> Sequence[PendingMember]: ...
 
     def commit(self) -> None: ...
+
+
+class PlayerProfileRepository(Protocol):
+    def get(self, user_id: int) -> PlayerProfile: ...
+
+    def save(
+        self, user_id: int, skill_level: SkillLevel | None, availability: tuple[Availability, ...]
+    ) -> PlayerProfile: ...
+
+    def candidates(self, user_id: int, levels: Sequence[SkillLevel]) -> Sequence[PlayerProfile]: ...

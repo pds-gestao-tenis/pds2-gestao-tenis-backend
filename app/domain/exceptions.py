@@ -97,3 +97,7 @@ class FeeNotFoundError(Exception):
 
 class FeeAlreadyPaidError(Exception):
     """Taxa já paga não pode ser alterada, excluída nem paga de novo."""
+
+
+class ProfileIncompleteError(Exception):
+    """US24: é preciso informar o próprio nível antes de buscar parceiros."""

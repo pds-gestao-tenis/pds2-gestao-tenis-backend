@@ -90,6 +90,31 @@ O pagamento pelo sistema ainda não usa um provedor de pagamentos: ele é aprova
 registrado como `paid_via: "online"`. A integração com um gateway entra em `PayOwnFeeHandler`
 (`app/handlers/fees.py`).
 
+## Perfil de jogo e parceiros (US23-US24)
+
+| Endpoint | Descrição |
+|---|---|
+| `GET /players/me/profile` | Nível e disponibilidade da própria conta |
+| `PUT /players/me/profile` | `skill_level` (`beginner`, `intermediate`, `advanced`, `competitive` ou `null`) e `availability`: lista de `{weekday: 0-6, period: morning\|afternoon\|evening}` (0 = segunda-feira) |
+| `GET /players/partners` | Jogadores de nível igual ou vizinho; com disponibilidade informada, só os que têm horário em comum, mais horários em comum primeiro. Sem nível informado: `409` |
+
+A lista de parceiros mostra nome, nível e horários em comum, nunca o e-mail. Para convidar um
+parceiro (US25), quem organiza inclui o jogador na reserva com `PATCH /bookings/{id}`
+(`player_ids`), e o convidado recebe o convite por e-mail.
+
+## Administração da agenda (US26-US30)
+
+- **Agenda centralizada e histórico (US26, US29):** `GET /bookings` devolve todas as reservas
+  para administradores, com filtros `court_id`, `status`, `starts_from`, `starts_to` e
+  `scope=upcoming|past`.
+- **Cancelar ou alterar (US27):** `POST /bookings/{id}/cancel` e `PATCH /bookings/{id}` aceitam
+  administradores; os envolvidos são avisados por e-mail.
+- **Bloquear horários (US28):** `POST /courts/{id}/maintenance` aceita `kind`: `maintenance`
+  (padrão) ou `event` (torneio, aula, evento do clube). Os dois bloqueiam a agenda.
+- **Indicadores (US30):** `GET /reports/occupancy?from=AAAA-MM-DD&to=AAAA-MM-DD` (admin, até 92
+  dias; padrão: últimos 30). Ocupação = horas reservadas confirmadas / horas disponíveis
+  (07:00-22:00 menos bloqueios), no total, por quadra, por dia da semana e por hora.
+
 ## Organização
 
 ```text

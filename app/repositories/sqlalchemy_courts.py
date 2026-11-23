@@ -8,6 +8,7 @@ from app.data.courts import CreateCourtData, UpdateCourtData
 from app.db.models import BookingModel, CourtMaintenanceModel, CourtModel
 from app.domain.entities import (
     ACTIVE_BOOKING_STATUSES,
+    BlockKind,
     Court,
     CourtPage,
     MaintenanceWindow,
@@ -49,7 +50,9 @@ class SqlAlchemyCourtRepository:
             )
             for item in records:
                 windows[item.court_id].append(
-                    MaintenanceWindow(item.id, item.starts_at, item.ends_at, item.reason)
+                    MaintenanceWindow(
+                        item.id, item.starts_at, item.ends_at, item.reason, BlockKind(item.kind)
+                    )
                 )
         return {court_id: tuple(items) for court_id, items in windows.items()}
 

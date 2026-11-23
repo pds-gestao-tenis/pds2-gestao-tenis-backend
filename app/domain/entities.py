@@ -63,12 +63,18 @@ class Surface(StrEnum):
     SYNTHETIC = "synthetic"
 
 
+class BlockKind(StrEnum):
+    MAINTENANCE = "maintenance"
+    EVENT = "event"
+
+
 @dataclass(frozen=True, slots=True)
 class MaintenanceWindow:
     id: int
     starts_at: datetime
     ends_at: datetime
     reason: str
+    kind: BlockKind = BlockKind.MAINTENANCE
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,3 +281,43 @@ class PendingMember:
     pending_total: Decimal
     overdue_count: int
     oldest_due_date: date
+
+
+class SkillLevel(StrEnum):
+    BEGINNER = "beginner"
+    INTERMEDIATE = "intermediate"
+    ADVANCED = "advanced"
+    COMPETITIVE = "competitive"
+
+    @property
+    def rank(self) -> int:
+        return list(SkillLevel).index(self)
+
+
+class DayPeriod(StrEnum):
+    MORNING = "morning"
+    AFTERNOON = "afternoon"
+    EVENING = "evening"
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class Availability:
+    # 0 = segunda-feira ... 6 = domingo.
+    weekday: int
+    period: DayPeriod
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerProfile:
+    user_id: int
+    name: str
+    skill_level: SkillLevel | None
+    availability: tuple[Availability, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PartnerSuggestion:
+    id: int
+    name: str
+    skill_level: SkillLevel
+    shared_availability: tuple[Availability, ...]

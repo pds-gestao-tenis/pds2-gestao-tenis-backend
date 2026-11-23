@@ -145,6 +145,7 @@ class SqlAlchemyBookingRepository:
                 starts_at=data.starts_at,
                 ends_at=data.ends_at,
                 reason=data.reason,
+                kind=data.kind.value,
             )
             .returning(CourtMaintenanceModel.id)
         )
