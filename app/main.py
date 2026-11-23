@@ -10,10 +10,15 @@ from sqlalchemy.orm import sessionmaker
 from app.controllers.auth import router
 from app.controllers.bookings import router as bookings_router
 from app.controllers.courts import router as courts_router
+from app.controllers.fees import router as fees_router
 from app.controllers.members import router as members_router
+from app.controllers.notifications import router as notifications_router
+from app.controllers.players import router as players_router
+from app.controllers.reports import router as reports_router
 from app.controllers.schedule import router as schedule_router
 from app.controllers.sessions import router as sessions_router
 from app.core.config import Settings
+from app.core.mailer import build_mailer
 from app.core.rate_limit import RegistrationRateLimiter
 from app.domain.exceptions import (
     AuthenticationError,
@@ -27,6 +32,8 @@ from app.domain.exceptions import (
     DuplicateCourtNameError,
     DuplicateEmailError,
     DuplicateMemberEmailError,
+    FeeAlreadyPaidError,
+    FeeNotFoundError,
     ForbiddenError,
     InvalidBookingError,
     InvalidCredentialsError,
@@ -34,6 +41,7 @@ from app.domain.exceptions import (
     MaintenanceNotFoundError,
     MemberNotFoundError,
     OrganizerAttendanceError,
+    ProfileIncompleteError,
     SlotUnavailableError,
 )
 
@@ -43,6 +51,9 @@ PRIVATE_PREFIXES = (
     "/api/v1/bookings",
     "/api/v1/schedule",
     "/api/v1/players",
+    "/api/v1/fees",
+    "/api/v1/internal",
+    "/api/v1/reports",
 )
 
 
@@ -68,6 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     application.state.settings = settings
+    application.state.mailer = build_mailer(settings)
     limiter = RegistrationRateLimiter(
         settings.registration_rate_limit, settings.registration_rate_window_seconds
     )
@@ -167,6 +179,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             content["errors"] = {field: [text]}
         return JSONResponse(status_code=status_code, content=content)
 
+    @application.exception_handler(ProfileIncompleteError)
+    async def profile_incomplete(request: Request, error: ProfileIncompleteError) -> JSONResponse:
+        return message(
+            409, "Informe seu nível de habilidade para encontrar parceiros.", "skill_level"
+        )
+
+    @application.exception_handler(FeeNotFoundError)
+    async def fee_not_found(request: Request, error: FeeNotFoundError) -> JSONResponse:
+        return message(404, "Taxa não encontrada.")
+
+    @application.exception_handler(FeeAlreadyPaidError)
+    async def fee_paid(request: Request, error: FeeAlreadyPaidError) -> JSONResponse:
+        return message(409, "Esta taxa já foi paga.")
+
     @application.exception_handler(CourtNotFoundError)
     async def court_not_found(request: Request, error: CourtNotFoundError) -> JSONResponse:
         return message(404, "Quadra não encontrada.")
@@ -261,6 +287,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(courts_router)
     application.include_router(bookings_router)
     application.include_router(schedule_router)
+    application.include_router(notifications_router)
+    application.include_router(fees_router)
+    application.include_router(players_router)
+    application.include_router(reports_router)
     return application
 
 

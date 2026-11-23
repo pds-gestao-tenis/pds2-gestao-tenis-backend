@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from app.domain.entities import Surface
+from app.domain.entities import BlockKind, Surface
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,3 +33,4 @@ class MaintenanceData:
     ends_at: datetime
     reason: str
     cancel_bookings: bool = False
+    kind: BlockKind = BlockKind.MAINTENANCE

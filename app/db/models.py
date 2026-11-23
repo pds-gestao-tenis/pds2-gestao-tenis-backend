@@ -1,15 +1,17 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
     Integer,
     Numeric,
+    SmallInteger,
     String,
     UniqueConstraint,
     false,
@@ -27,6 +29,11 @@ class UserModel(Base):
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
         CheckConstraint("email = lower(btrim(email))", name="ck_users_email_normalized"),
+        CheckConstraint(
+            "skill_level IS NULL OR skill_level IN "
+            "('beginner', 'intermediate', 'advanced', 'competitive')",
+            name="ck_users_skill_level",
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -34,6 +41,8 @@ class UserModel(Base):
     email: Mapped[str] = mapped_column(String(254))
     password_hash: Mapped[str] = mapped_column(String(255))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # US23: nível informado pelo próprio jogador.
+    skill_level: Mapped[str | None] = mapped_column(String(12))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -128,6 +137,8 @@ class BookingModel(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # US18: quando o lembrete foi enviado; volta a NULL ao remarcar.
+    reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -159,6 +170,7 @@ class CourtMaintenanceModel(Base):
     __tablename__ = "court_maintenance"
     __table_args__ = (
         CheckConstraint("ends_at > starts_at", name="ck_court_maintenance_period"),
+        CheckConstraint("kind IN ('maintenance', 'event')", name="ck_court_maintenance_kind"),
         Index("ix_court_maintenance_court_ends_at", "court_id", "ends_at"),
     )
 
@@ -167,4 +179,63 @@ class CourtMaintenanceModel(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     reason: Mapped[str] = mapped_column(String(200))
+    # US28: o bloqueio pode ser manutenção ou evento do clube.
+    kind: Mapped[str] = mapped_column(String(12), server_default="maintenance")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MemberFeeModel(Base):
+    """US19-US22: taxa cobrada de um membro do clube."""
+
+    __tablename__ = "member_fees"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_member_fees_amount_positive"),
+        CheckConstraint("status IN ('pending', 'paid')", name="ck_member_fees_status"),
+        CheckConstraint(
+            "payment_method IS NULL OR payment_method IN ('cash', 'pix', 'card', 'transfer')",
+            name="ck_member_fees_payment_method",
+        ),
+        CheckConstraint(
+            "paid_via IS NULL OR paid_via IN ('admin', 'online')", name="ck_member_fees_paid_via"
+        ),
+        CheckConstraint(
+            "(status = 'paid') = (paid_at IS NOT NULL AND payment_method IS NOT NULL "
+            "AND paid_via IS NOT NULL)",
+            name="ck_member_fees_paid_fields",
+        ),
+        Index("ix_member_fees_member_status", "member_id", "status"),
+        Index("ix_member_fees_status_due_date", "status", "due_date"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    member_id: Mapped[int] = mapped_column(ForeignKey("members.id", ondelete="CASCADE"))
+    description: Mapped[str] = mapped_column(String(120))
+    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    due_date: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(10), server_default="pending")
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payment_method: Mapped[str | None] = mapped_column(String(10))
+    paid_via: Mapped[str | None] = mapped_column(String(10))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class PlayerAvailabilityModel(Base):
+    """US24: dias e períodos em que o jogador costuma jogar."""
+
+    __tablename__ = "player_availability"
+    __table_args__ = (
+        CheckConstraint("weekday BETWEEN 0 AND 6", name="ck_player_availability_weekday"),
+        CheckConstraint(
+            "period IN ('morning', 'afternoon', 'evening')", name="ck_player_availability_period"
+        ),
+        Index("ix_player_availability_slot", "weekday", "period"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    weekday: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    period: Mapped[str] = mapped_column(String(10), primary_key=True)

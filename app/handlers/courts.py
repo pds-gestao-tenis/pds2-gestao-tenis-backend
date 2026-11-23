@@ -88,6 +88,9 @@ class AddMaintenanceHandler:
         self.bookings = bookings
         self.courts = courts
         self.clock = clock
+        # Reservas canceladas pela manutenção e pedidos da fila confirmados (notificações).
+        self.cancelled: list[int] = []
+        self.promoted: list[int] = []
 
     def handle(self, court_id: int, data: MaintenanceData) -> Court:
         now = self.clock()
@@ -103,9 +106,10 @@ class AddMaintenanceHandler:
                 raise MaintenanceConflictError(len(affected))
             for booking in affected:
                 self.bookings.set_status(booking.id, BookingStatus.CANCELLED, cancelled_at=now)
+            self.cancelled = [booking.id for booking in affected]
             self.bookings.add_maintenance(court_id, data)
             # Reservas canceladas que passavam do período podem liberar horário para a fila.
-            promote_waitlist(self.bookings, court_id, now)
+            self.promoted = promote_waitlist(self.bookings, court_id, now)
         return self.courts.get(court_id)
 
 

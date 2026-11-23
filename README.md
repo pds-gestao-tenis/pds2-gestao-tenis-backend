@@ -41,6 +41,80 @@ uvicorn app.main:app --reload --no-proxy-headers
 
 Para usar somente o PostgreSQL pelo Docker: `docker compose up -d db`. A aplicação monta a URL de conexão a partir das variáveis `DB_*`, incluindo o escape correto de caracteres especiais na senha.
 
+## Notificações por e-mail (US15-US18)
+
+A API avisa por e-mail, pelo [Resend](https://resend.com):
+
+| Quando | Quem recebe |
+|---|---|
+| Reserva confirmada (no pedido ou quando a fila de espera libera a vaga) | Quem reservou |
+| Jogador incluído em uma reserva | O jogador convidado |
+| Reserva cancelada (por quem reservou, pela administração ou por bloqueio da quadra) | Os demais envolvidos |
+| Reserva remarcada | Os demais envolvidos |
+| Lembrete, `REMINDER_HOURS_BEFORE` horas antes (padrão 24) | Quem reservou e quem não recusou a presença |
+
+O texto é montado durante a requisição e o envio acontece depois da resposta: uma falha no Resend
+fica no log e não afeta a reserva. Sem `RESEND_API_KEY`, os e-mails só aparecem no log.
+
+Os lembretes saem pela rota interna `POST /api/v1/internal/reminders`, que exige o cabeçalho
+`X-Cron-Token` igual a `CRON_TOKEN` e envia um único lembrete por horário (remarcar gera um novo). O
+workflow `.github/workflows/reminders.yml` chama a rota a cada 15 minutos; ele precisa do secret
+`CRON_TOKEN` e, se a API não estiver no endereço padrão, da variável `API_URL`. Em forks, workflows
+agendados precisam ser habilitados na aba Actions.
+
+| Variável | Uso |
+|---|---|
+| `RESEND_API_KEY` | Chave do Resend |
+| `MAIL_FROM` | Remetente, de um domínio verificado no Resend |
+| `APP_URL` | Endereço do frontend, para os links dos e-mails |
+| `REMINDER_HOURS_BEFORE` | Antecedência do lembrete, em horas |
+| `CRON_TOKEN` | Token da rota de lembretes |
+
+## Taxas e pagamentos (US19-US22)
+
+Cada taxa pertence a um cadastro de membro (US03). O jogador vê as taxas do membro que tem o
+mesmo e-mail da conta dele. "Atrasada" = pendente com vencimento antes de hoje, no fuso do clube.
+
+| Endpoint | Quem | Descrição |
+|---|---|---|
+| `POST /fees` | Admin | Lança uma taxa: `member_id`, `description`, `amount`, `due_date` |
+| `GET /fees` | Admin | Lista por vencimento; filtros `member_id`, `status`, `overdue=true` |
+| `PATCH /fees/{id}` | Admin | Corrige descrição, valor ou vencimento (só pendentes) |
+| `DELETE /fees/{id}` | Admin | Exclui (só pendentes) |
+| `POST /fees/{id}/payment` | Admin | Registra pagamento recebido: `method` (`cash`, `pix`, `card`, `transfer`) e `paid_at` opcional |
+| `GET /fees/pending-members` | Admin | Membros com pendências: quantidade, total, atrasadas e vencimento mais antigo |
+| `GET /fees/mine` | Jogador | Taxas pagas e pendentes da própria conta, com totais |
+| `POST /fees/mine/{id}/pay` | Jogador | Paga uma taxa própria por `pix` ou `card` |
+
+O pagamento pelo sistema ainda não usa um provedor de pagamentos: ele é aprovado na hora e fica
+registrado como `paid_via: "online"`. A integração com um gateway entra em `PayOwnFeeHandler`
+(`app/handlers/fees.py`).
+
+## Perfil de jogo e parceiros (US23-US24)
+
+| Endpoint | Descrição |
+|---|---|
+| `GET /players/me/profile` | Nível e disponibilidade da própria conta |
+| `PUT /players/me/profile` | `skill_level` (`beginner`, `intermediate`, `advanced`, `competitive` ou `null`) e `availability`: lista de `{weekday: 0-6, period: morning\|afternoon\|evening}` (0 = segunda-feira) |
+| `GET /players/partners` | Jogadores de nível igual ou vizinho; com disponibilidade informada, só os que têm horário em comum, mais horários em comum primeiro. Sem nível informado: `409` |
+
+A lista de parceiros mostra nome, nível e horários em comum, nunca o e-mail. Para convidar um
+parceiro (US25), quem organiza inclui o jogador na reserva com `PATCH /bookings/{id}`
+(`player_ids`), e o convidado recebe o convite por e-mail.
+
+## Administração da agenda (US26-US30)
+
+- **Agenda centralizada e histórico (US26, US29):** `GET /bookings` devolve todas as reservas
+  para administradores, com filtros `court_id`, `status`, `starts_from`, `starts_to` e
+  `scope=upcoming|past`.
+- **Cancelar ou alterar (US27):** `POST /bookings/{id}/cancel` e `PATCH /bookings/{id}` aceitam
+  administradores; os envolvidos são avisados por e-mail.
+- **Bloquear horários (US28):** `POST /courts/{id}/maintenance` aceita `kind`: `maintenance`
+  (padrão) ou `event` (torneio, aula, evento do clube). Os dois bloqueiam a agenda.
+- **Indicadores (US30):** `GET /reports/occupancy?from=AAAA-MM-DD&to=AAAA-MM-DD` (admin, até 92
+  dias; padrão: últimos 30). Ocupação = horas reservadas confirmadas / horas disponíveis
+  (07:00-22:00 menos bloqueios), no total, por quadra, por dia da semana e por hora.
+
 ## Organização
 
 ```text

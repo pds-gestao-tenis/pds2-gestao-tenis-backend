@@ -1,17 +1,20 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query, Response, status
 from pydantic import AwareDatetime
 
+from app.core.mailer import Mailer, send_all
 from app.data.bookings import BookingFilters, CreateBookingData, UpdateBookingData
 from app.dependencies import (
     get_attendance_handler,
     get_booking_handler,
+    get_booking_notifier,
     get_cancel_booking_handler,
     get_create_booking_handler,
     get_current_user,
     get_delete_booking_handler,
     get_list_bookings_handler,
+    get_mailer,
     get_update_booking_handler,
     require_administrator,
 )
@@ -25,6 +28,7 @@ from app.handlers.bookings import (
     RespondAttendanceHandler,
     UpdateBookingHandler,
 )
+from app.handlers.notifications import BookingNotifier
 from app.schemas.auth import AuthenticationErrorResponse, ValidationErrorResponse
 from app.schemas.bookings import (
     AttendanceRequest,
@@ -50,6 +54,8 @@ router = APIRouter(
     },
 )
 CurrentUser = Annotated[User, Depends(get_current_user)]
+Notifier = Annotated[BookingNotifier, Depends(get_booking_notifier)]
+MailerDependency = Annotated[Mailer, Depends(get_mailer)]
 BookingId = Annotated[int, Path(ge=1, le=9223372036854775807)]
 not_found = {
     "model": ErrorResponse,
@@ -82,6 +88,9 @@ def create_booking(
     payload: CreateBookingRequest,
     user: CurrentUser,
     handler: Annotated[CreateBookingHandler, Depends(get_create_booking_handler)],
+    notifier: Notifier,
+    mailer: MailerDependency,
+    background: BackgroundTasks,
 ) -> BookingEnvelope:
     booking = handler.handle(
         user,
@@ -93,6 +102,7 @@ def create_booking(
             join_waitlist=payload.join_waitlist,
         ),
     )
+    background.add_task(send_all, mailer, notifier.created(booking))
     return BookingEnvelope(data=BookingResponse.for_viewer(booking, user))
 
 
@@ -182,6 +192,9 @@ def update_booking(
     payload: UpdateBookingRequest,
     user: CurrentUser,
     handler: Annotated[UpdateBookingHandler, Depends(get_update_booking_handler)],
+    notifier: Notifier,
+    mailer: MailerDependency,
+    background: BackgroundTasks,
 ) -> BookingEnvelope:
     booking = handler.handle(
         user,
@@ -194,6 +207,11 @@ def update_booking(
             join_waitlist=payload.join_waitlist,
         ),
     )
+    emails = notifier.rescheduled(booking, user) if handler.rescheduled else []
+    if not handler.rescheduled:
+        emails += notifier.invited(booking, handler.added_players)
+    emails += notifier.promoted(handler.promoted)
+    background.add_task(send_all, mailer, emails)
     return BookingEnvelope(data=BookingResponse.for_viewer(booking, user))
 
 
@@ -211,8 +229,14 @@ def cancel_booking(
     booking_id: BookingId,
     user: CurrentUser,
     handler: Annotated[CancelBookingHandler, Depends(get_cancel_booking_handler)],
+    notifier: Notifier,
+    mailer: MailerDependency,
+    background: BackgroundTasks,
 ) -> BookingEnvelope:
-    return BookingEnvelope(data=BookingResponse.for_viewer(handler.handle(user, booking_id), user))
+    booking = handler.handle(user, booking_id)
+    emails = notifier.cancelled(handler.removed, user) if handler.removed else []
+    background.add_task(send_all, mailer, emails + notifier.promoted(handler.promoted))
+    return BookingEnvelope(data=BookingResponse.for_viewer(booking, user))
 
 
 @router.delete(
@@ -230,8 +254,13 @@ def delete_booking(
     booking_id: BookingId,
     user: Annotated[User, Depends(require_administrator)],
     handler: Annotated[DeleteBookingHandler, Depends(get_delete_booking_handler)],
+    notifier: Notifier,
+    mailer: MailerDependency,
+    background: BackgroundTasks,
 ) -> Response:
     handler.handle(user, booking_id)
+    emails = notifier.cancelled(handler.removed, user) if handler.removed else []
+    background.add_task(send_all, mailer, emails + notifier.promoted(handler.promoted))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

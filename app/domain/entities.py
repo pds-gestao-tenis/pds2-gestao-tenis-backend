@@ -63,12 +63,18 @@ class Surface(StrEnum):
     SYNTHETIC = "synthetic"
 
 
+class BlockKind(StrEnum):
+    MAINTENANCE = "maintenance"
+    EVENT = "event"
+
+
 @dataclass(frozen=True, slots=True)
 class MaintenanceWindow:
     id: int
     starts_at: datetime
     ends_at: datetime
     reason: str
+    kind: BlockKind = BlockKind.MAINTENANCE
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +148,15 @@ class Booking:
 
 
 @dataclass(frozen=True, slots=True)
+class Contact:
+    """Nome e e-mail de uma conta, para notificações."""
+
+    id: int
+    name: str
+    email: str
+
+
+@dataclass(frozen=True, slots=True)
 class BookingSlot:
     """Dados mínimos de uma reserva para decidir conflitos e a ordem da fila."""
 
@@ -205,3 +220,104 @@ class Schedule:
     date: date
     courts: tuple[Court, ...]
     slots: tuple[ScheduleSlot, ...]
+
+
+class FeeStatus(StrEnum):
+    PENDING = "pending"
+    PAID = "paid"
+
+
+class PaymentMethod(StrEnum):
+    CASH = "cash"
+    PIX = "pix"
+    CARD = "card"
+    TRANSFER = "transfer"
+
+
+class PaidVia(StrEnum):
+    # Registrado pela administração (US19) ou pago pelo próprio jogador no sistema (US22).
+    ADMIN = "admin"
+    ONLINE = "online"
+
+
+@dataclass(frozen=True, slots=True)
+class FeeMember:
+    id: int
+    name: str
+    email: str
+
+
+@dataclass(frozen=True, slots=True)
+class Fee:
+    id: int
+    member: FeeMember
+    description: str
+    amount: Decimal
+    due_date: date
+    status: FeeStatus
+    paid_at: datetime | None
+    payment_method: PaymentMethod | None
+    paid_via: PaidVia | None
+    created_at: datetime
+
+    def overdue(self, today: date) -> bool:
+        return self.status is FeeStatus.PENDING and self.due_date < today
+
+
+@dataclass(frozen=True, slots=True)
+class FeePage:
+    items: tuple[Fee, ...]
+    total: int
+    page: int
+    page_size: int
+
+
+@dataclass(frozen=True, slots=True)
+class PendingMember:
+    """US21: membro com taxas pendentes e o resumo delas."""
+
+    member: FeeMember
+    pending_count: int
+    pending_total: Decimal
+    overdue_count: int
+    oldest_due_date: date
+
+
+class SkillLevel(StrEnum):
+    BEGINNER = "beginner"
+    INTERMEDIATE = "intermediate"
+    ADVANCED = "advanced"
+    COMPETITIVE = "competitive"
+
+    @property
+    def rank(self) -> int:
+        return list(SkillLevel).index(self)
+
+
+class DayPeriod(StrEnum):
+    MORNING = "morning"
+    AFTERNOON = "afternoon"
+    EVENING = "evening"
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class Availability:
+    # 0 = segunda-feira ... 6 = domingo.
+    weekday: int
+    period: DayPeriod
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerProfile:
+    user_id: int
+    name: str
+    skill_level: SkillLevel | None
+    availability: tuple[Availability, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PartnerSuggestion:
+    id: int
+    name: str
+    skill_level: SkillLevel
+    shared_availability: tuple[Availability, ...]

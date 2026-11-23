@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     # A agenda do dia é montada no fuso do clube: "dia 10" começa à meia-noite daqui.
     club_timezone: str = "America/Sao_Paulo"
 
+    # E-mails (US16-US18). Sem RESEND_API_KEY os e-mails só são registrados no log.
+    resend_api_key: SecretStr | None = None
+    mail_from: str = "Clube de Tênis <nao-responda@spyno.app>"
+    # Endereço do frontend, usado nos links dos e-mails.
+    app_url: str = "http://localhost:5173"
+    # Antecedência do lembrete de reserva (US18).
+    reminder_hours_before: int = Field(default=24, ge=1, le=168)
+    # Token exigido pela rota interna que dispara os lembretes (chamada por um agendador).
+    cron_token: SecretStr | None = None
+
     @property
     def database_url(self) -> URL:
         return URL.create(

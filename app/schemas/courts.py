@@ -13,7 +13,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.domain.entities import Surface
+from app.domain.entities import BlockKind, Surface
 from app.schemas.members import PaginationMeta
 
 # Aceita número ou texto ("120.50") e responde como número JSON.
@@ -87,6 +87,11 @@ class MaintenanceRequest(BaseModel):
     starts_at: AwareDatetime = Field(strict=False, examples=["2026-11-20T08:00:00-03:00"])
     ends_at: AwareDatetime = Field(strict=False, examples=["2026-11-20T12:00:00-03:00"])
     reason: str = Field(min_length=1, max_length=200, examples=["Troca do saibro"])
+    kind: BlockKind = Field(
+        default=BlockKind.MAINTENANCE,
+        strict=False,
+        description="maintenance (manutenção) ou event (evento do clube, como um torneio).",
+    )
     cancel_bookings: bool = Field(
         default=False,
         description="Cancela as reservas e pedidos na fila do período em vez de recusar (409).",
@@ -113,6 +118,7 @@ class MaintenanceResponse(BaseModel):
     starts_at: datetime
     ends_at: datetime
     reason: str
+    kind: BlockKind
 
 
 class CourtResponse(BaseModel):

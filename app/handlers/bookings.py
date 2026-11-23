@@ -34,8 +34,12 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def promote_waitlist(bookings: BookingRepository, court_id: int, now: datetime) -> None:
-    """Confirma, na ordem de pedido, cada pedido da fila cujo horário ficou livre."""
+def promote_waitlist(bookings: BookingRepository, court_id: int, now: datetime) -> list[int]:
+    """Confirma, na ordem de pedido, cada pedido da fila cujo horário ficou livre.
+
+    Devolve os ids confirmados, para avisar quem pediu (US15/US16).
+    """
+    promoted: list[int] = []
     for candidate in bookings.waitlisted(court_id, starting_after=now):
         if bookings.has_maintenance_overlap(court_id, candidate.starts_at, candidate.ends_at):
             continue
@@ -43,12 +47,19 @@ def promote_waitlist(bookings: BookingRepository, court_id: int, now: datetime) 
             court_id, candidate.starts_at, candidate.ends_at, exclude_id=None
         ):
             bookings.set_status(candidate.id, BookingStatus.CONFIRMED)
+            promoted.append(candidate.id)
+    return promoted
 
 
 class _BookingHandler:
     def __init__(self, bookings: BookingRepository, clock: Callable[[], datetime] = utcnow) -> None:
         self.bookings = bookings
         self.clock = clock
+        # O que a última chamada mudou, para as notificações (US16/US17).
+        self.promoted: list[int] = []
+        self.rescheduled = False
+        self.added_players: tuple[int, ...] = ()
+        self.removed: Booking | None = None
 
     def _load(self, booking_id: int, user: User) -> Booking:
         booking = self.bookings.get(booking_id)
@@ -193,7 +204,9 @@ class UpdateBookingHandler(_BookingHandler):
                 )
                 players = self._players(target, organizer_id, player_ids)
                 if data.player_ids is not None:
+                    before = {player.id for player in booking.players}
                     self.bookings.replace_players(booking_id, players, organizer_id=organizer_id)
+                    self.added_players = tuple(item for item in players if item not in before)
 
             starts_at = data.starts_at or booking.starts_at
             duration = data.duration_minutes or int(
@@ -219,8 +232,9 @@ class UpdateBookingHandler(_BookingHandler):
                     status=status,
                 )
                 self.bookings.reset_attendance(booking_id, organizer_id=organizer_id)
+                self.rescheduled = True
                 # O horário antigo pode ter liberado espaço para a fila da quadra de origem.
-                promote_waitlist(self.bookings, court.id, self.clock())
+                self.promoted = promote_waitlist(self.bookings, court.id, self.clock())
         return self._load(booking_id, user)
 
 
@@ -231,9 +245,10 @@ class CancelBookingHandler(_BookingHandler):
         now = self.clock()
         with self.bookings.transaction():
             court, booking, _ = self._lock_for_change(booking_id, user)
+            self.removed = booking  # Estado antes do cancelamento, para o aviso (US17).
             self.bookings.set_status(booking_id, BookingStatus.CANCELLED, cancelled_at=now)
             if booking.status is BookingStatus.CONFIRMED:
-                promote_waitlist(self.bookings, court.id, now)
+                self.promoted = promote_waitlist(self.bookings, court.id, now)
         return self._load(booking_id, user)
 
 
@@ -248,8 +263,10 @@ class DeleteBookingHandler(_BookingHandler):
                 raise BookingNotFoundError
             booking = self._load(booking_id, user)
             self.bookings.delete(booking_id)
+            if booking.starts_at > now and booking.status is not BookingStatus.CANCELLED:
+                self.removed = booking
             if booking.status is BookingStatus.CONFIRMED and booking.starts_at > now:
-                promote_waitlist(self.bookings, court_id, now)
+                self.promoted = promote_waitlist(self.bookings, court_id, now)
 
 
 class RespondAttendanceHandler(_BookingHandler):
