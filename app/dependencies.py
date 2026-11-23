@@ -9,6 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pwdlib import PasswordHash
 from sqlalchemy.orm import Session
 
+from app.core.mailer import Mailer
 from app.core.passwords import PasswordVerifier
 from app.core.tokens import TokenService
 from app.domain.entities import AuthenticatedSession, User
@@ -42,6 +43,7 @@ from app.handlers.members import (
     ListMembersHandler,
     UpdateMemberHandler,
 )
+from app.handlers.notifications import BookingNotifier, SendRemindersHandler
 from app.handlers.register_user import RegisterUserHandler
 from app.handlers.schedule import GetScheduleHandler, SearchPlayersHandler
 from app.repositories.sqlalchemy_bookings import SqlAlchemyBookingRepository
@@ -249,3 +251,19 @@ def get_search_players_handler(
     session: Annotated[Session, Depends(get_session)],
 ) -> SearchPlayersHandler:
     return SearchPlayersHandler(SqlAlchemyUserRepository(session))
+
+
+def get_mailer(request: Request) -> Mailer:
+    return request.app.state.mailer
+
+
+def get_booking_notifier(
+    request: Request, bookings: BookingRepositoryDependency
+) -> BookingNotifier:
+    return BookingNotifier(bookings, request.app.state.settings)
+
+
+def get_reminders_handler(
+    request: Request, bookings: BookingRepositoryDependency
+) -> SendRemindersHandler:
+    return SendRemindersHandler(bookings, request.app.state.settings)

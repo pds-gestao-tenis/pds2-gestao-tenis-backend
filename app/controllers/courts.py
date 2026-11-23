@@ -1,19 +1,23 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query, Response, status
 
+from app.core.mailer import Mailer, send_all
 from app.data.courts import CreateCourtData, MaintenanceData, UpdateCourtData
 from app.dependencies import (
     get_add_maintenance_handler,
+    get_booking_notifier,
     get_court_handler,
     get_create_court_handler,
     get_current_user,
     get_delete_court_handler,
     get_list_courts_handler,
+    get_mailer,
     get_remove_maintenance_handler,
     get_update_court_handler,
     require_administrator,
 )
+from app.domain.entities import User
 from app.handlers.courts import (
     AddMaintenanceHandler,
     CreateCourtHandler,
@@ -23,6 +27,7 @@ from app.handlers.courts import (
     RemoveMaintenanceHandler,
     UpdateCourtHandler,
 )
+from app.handlers.notifications import BookingNotifier
 from app.schemas.auth import AuthenticationErrorResponse, ValidationErrorResponse
 from app.schemas.courts import (
     CourtEnvelope,
@@ -193,6 +198,10 @@ def add_maintenance(
     court_id: CourtId,
     payload: MaintenanceRequest,
     handler: Annotated[AddMaintenanceHandler, Depends(get_add_maintenance_handler)],
+    user: Annotated[User, Depends(require_administrator)],
+    notifier: Annotated[BookingNotifier, Depends(get_booking_notifier)],
+    mailer: Annotated[Mailer, Depends(get_mailer)],
+    background: BackgroundTasks,
 ) -> CourtEnvelope:
     court = handler.handle(
         court_id,
@@ -200,6 +209,15 @@ def add_maintenance(
             payload.starts_at, payload.ends_at, payload.reason, payload.cancel_bookings
         ),
     )
+    # US17: quem tinha reserva no período é avisado do cancelamento.
+    emails = []
+    for booking_id in handler.cancelled:
+        booking = notifier.bookings.get(booking_id)
+        if booking is not None:
+            emails += notifier.cancelled(
+                booking, user, reason=f"período bloqueado na quadra ({payload.reason})"
+            )
+    background.add_task(send_all, mailer, emails + notifier.promoted(handler.promoted))
     return CourtEnvelope(data=CourtResponse.model_validate(court))
 
 

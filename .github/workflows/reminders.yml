@@ -1,0 +1,27 @@
+name: Lembretes de reservas
+
+# US18: a cada 15 minutos pede à API que envie os lembretes das reservas que começam em breve.
+# A chamada também acorda o serviço no plano gratuito do Render.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Disparar lembretes
+        env:
+          API_URL: ${{ vars.API_URL || 'https://gestao-tenis-api.onrender.com' }}
+          CRON_TOKEN: ${{ secrets.CRON_TOKEN }}
+        run: |
+          if [ -z "$CRON_TOKEN" ]; then
+            echo "::error::Secret CRON_TOKEN não configurado"
+            exit 1
+          fi
+          # O serviço pode estar dormindo: tenta por até ~2 minutos.
+          curl --fail --silent --show-error --retry 5 --retry-delay 20 --retry-all-errors \
+            --max-time 90 -X POST "$API_URL/api/v1/internal/reminders" \
+            -H "X-Cron-Token: $CRON_TOKEN"

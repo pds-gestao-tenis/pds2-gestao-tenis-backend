@@ -13,6 +13,7 @@ from app.domain.entities import (
     BookingPage,
     BookingSlot,
     BookingStatus,
+    Contact,
     Court,
     CourtPage,
     Member,
@@ -148,3 +149,9 @@ class BookingRepository(Protocol):
     def waitlisted(self, court_id: int, *, starting_after: datetime) -> Sequence[BookingSlot]: ...
 
     def delete(self, booking_id: int) -> None: ...
+
+    def contacts(self, user_ids: set[int]) -> dict[int, Contact]: ...
+
+    def due_for_reminder(self, starts_from: datetime, starts_to: datetime) -> Sequence[int]: ...
+
+    def mark_reminded(self, booking_ids: Sequence[int], sent_at: datetime) -> None: ...

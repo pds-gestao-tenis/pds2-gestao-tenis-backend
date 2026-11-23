@@ -11,9 +11,11 @@ from app.controllers.auth import router
 from app.controllers.bookings import router as bookings_router
 from app.controllers.courts import router as courts_router
 from app.controllers.members import router as members_router
+from app.controllers.notifications import router as notifications_router
 from app.controllers.schedule import router as schedule_router
 from app.controllers.sessions import router as sessions_router
 from app.core.config import Settings
+from app.core.mailer import build_mailer
 from app.core.rate_limit import RegistrationRateLimiter
 from app.domain.exceptions import (
     AuthenticationError,
@@ -68,6 +70,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     application.state.settings = settings
+    application.state.mailer = build_mailer(settings)
     limiter = RegistrationRateLimiter(
         settings.registration_rate_limit, settings.registration_rate_window_seconds
     )
@@ -261,6 +264,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(courts_router)
     application.include_router(bookings_router)
     application.include_router(schedule_router)
+    application.include_router(notifications_router)
     return application
 
 

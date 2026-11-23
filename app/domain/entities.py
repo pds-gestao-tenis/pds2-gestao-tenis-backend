@@ -142,6 +142,15 @@ class Booking:
 
 
 @dataclass(frozen=True, slots=True)
+class Contact:
+    """Nome e e-mail de uma conta, para notificações."""
+
+    id: int
+    name: str
+    email: str
+
+
+@dataclass(frozen=True, slots=True)
 class BookingSlot:
     """Dados mínimos de uma reserva para decidir conflitos e a ordem da fila."""
 

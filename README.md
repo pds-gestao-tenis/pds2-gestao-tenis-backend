@@ -41,6 +41,35 @@ uvicorn app.main:app --reload --no-proxy-headers
 
 Para usar somente o PostgreSQL pelo Docker: `docker compose up -d db`. A aplicação monta a URL de conexão a partir das variáveis `DB_*`, incluindo o escape correto de caracteres especiais na senha.
 
+## Notificações por e-mail (US15-US18)
+
+A API avisa por e-mail, pelo [Resend](https://resend.com):
+
+| Quando | Quem recebe |
+|---|---|
+| Reserva confirmada (no pedido ou quando a fila de espera libera a vaga) | Quem reservou |
+| Jogador incluído em uma reserva | O jogador convidado |
+| Reserva cancelada (por quem reservou, pela administração ou por bloqueio da quadra) | Os demais envolvidos |
+| Reserva remarcada | Os demais envolvidos |
+| Lembrete, `REMINDER_HOURS_BEFORE` horas antes (padrão 24) | Quem reservou e quem não recusou a presença |
+
+O texto é montado durante a requisição e o envio acontece depois da resposta: uma falha no Resend
+fica no log e não afeta a reserva. Sem `RESEND_API_KEY`, os e-mails só aparecem no log.
+
+Os lembretes saem pela rota interna `POST /api/v1/internal/reminders`, que exige o cabeçalho
+`X-Cron-Token` igual a `CRON_TOKEN` e envia um único lembrete por horário (remarcar gera um novo). O
+workflow `.github/workflows/reminders.yml` chama a rota a cada 15 minutos; ele precisa do secret
+`CRON_TOKEN` e, se a API não estiver no endereço padrão, da variável `API_URL`. Em forks, workflows
+agendados precisam ser habilitados na aba Actions.
+
+| Variável | Uso |
+|---|---|
+| `RESEND_API_KEY` | Chave do Resend |
+| `MAIL_FROM` | Remetente, de um domínio verificado no Resend |
+| `APP_URL` | Endereço do frontend, para os links dos e-mails |
+| `REMINDER_HOURS_BEFORE` | Antecedência do lembrete, em horas |
+| `CRON_TOKEN` | Token da rota de lembretes |
+
 ## Organização
 
 ```text

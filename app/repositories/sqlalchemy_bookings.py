@@ -23,6 +23,7 @@ from app.domain.entities import (
     BookingScope,
     BookingSlot,
     BookingStatus,
+    Contact,
     Court,
     Person,
     Player,
@@ -195,6 +196,8 @@ class SqlAlchemyBookingRepository:
                 status=status.value,
                 # Novo horário é um novo pedido: vai para o fim da fila desse horário.
                 requested_at=func.clock_timestamp(),
+                # Novo horário, novo lembrete (US18).
+                reminder_sent_at=None,
                 updated_at=func.now(),
             )
         )
@@ -302,6 +305,35 @@ class SqlAlchemyBookingRepository:
 
     def delete(self, booking_id: int) -> None:
         self.session.execute(delete(BookingModel).where(BookingModel.id == booking_id))
+
+    def contacts(self, user_ids: set[int]) -> dict[int, Contact]:
+        if not user_ids:
+            return {}
+        rows = self.session.execute(
+            select(UserModel.id, UserModel.name, UserModel.email).where(UserModel.id.in_(user_ids))
+        )
+        return {row.id: Contact(row.id, row.name, row.email) for row in rows}
+
+    def due_for_reminder(self, starts_from: datetime, starts_to: datetime) -> Sequence[int]:
+        return self.session.scalars(
+            select(BookingModel.id)
+            .where(
+                BookingModel.status == BookingStatus.CONFIRMED.value,
+                BookingModel.reminder_sent_at.is_(None),
+                BookingModel.starts_at > starts_from,
+                BookingModel.starts_at <= starts_to,
+            )
+            .order_by(BookingModel.starts_at, BookingModel.id)
+            .with_for_update(skip_locked=True)
+        ).all()
+
+    def mark_reminded(self, booking_ids: Sequence[int], sent_at: datetime) -> None:
+        if booking_ids:
+            self.session.execute(
+                update(BookingModel)
+                .where(BookingModel.id.in_(booking_ids))
+                .values(reminder_sent_at=sent_at)
+            )
 
     # ---------- Leitura ----------
 

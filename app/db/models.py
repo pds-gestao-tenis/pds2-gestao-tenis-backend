@@ -128,6 +128,8 @@ class BookingModel(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # US18: quando o lembrete foi enviado; volta a NULL ao remarcar.
+    reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
