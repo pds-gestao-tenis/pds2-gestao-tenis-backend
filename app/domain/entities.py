@@ -214,3 +214,64 @@ class Schedule:
     date: date
     courts: tuple[Court, ...]
     slots: tuple[ScheduleSlot, ...]
+
+
+class FeeStatus(StrEnum):
+    PENDING = "pending"
+    PAID = "paid"
+
+
+class PaymentMethod(StrEnum):
+    CASH = "cash"
+    PIX = "pix"
+    CARD = "card"
+    TRANSFER = "transfer"
+
+
+class PaidVia(StrEnum):
+    # Registrado pela administração (US19) ou pago pelo próprio jogador no sistema (US22).
+    ADMIN = "admin"
+    ONLINE = "online"
+
+
+@dataclass(frozen=True, slots=True)
+class FeeMember:
+    id: int
+    name: str
+    email: str
+
+
+@dataclass(frozen=True, slots=True)
+class Fee:
+    id: int
+    member: FeeMember
+    description: str
+    amount: Decimal
+    due_date: date
+    status: FeeStatus
+    paid_at: datetime | None
+    payment_method: PaymentMethod | None
+    paid_via: PaidVia | None
+    created_at: datetime
+
+    def overdue(self, today: date) -> bool:
+        return self.status is FeeStatus.PENDING and self.due_date < today
+
+
+@dataclass(frozen=True, slots=True)
+class FeePage:
+    items: tuple[Fee, ...]
+    total: int
+    page: int
+    page_size: int
+
+
+@dataclass(frozen=True, slots=True)
+class PendingMember:
+    """US21: membro com taxas pendentes e o resumo delas."""
+
+    member: FeeMember
+    pending_count: int
+    pending_total: Decimal
+    overdue_count: int
+    oldest_due_date: date

@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from app.controllers.auth import router
 from app.controllers.bookings import router as bookings_router
 from app.controllers.courts import router as courts_router
+from app.controllers.fees import router as fees_router
 from app.controllers.members import router as members_router
 from app.controllers.notifications import router as notifications_router
 from app.controllers.schedule import router as schedule_router
@@ -29,6 +30,8 @@ from app.domain.exceptions import (
     DuplicateCourtNameError,
     DuplicateEmailError,
     DuplicateMemberEmailError,
+    FeeAlreadyPaidError,
+    FeeNotFoundError,
     ForbiddenError,
     InvalidBookingError,
     InvalidCredentialsError,
@@ -45,6 +48,8 @@ PRIVATE_PREFIXES = (
     "/api/v1/bookings",
     "/api/v1/schedule",
     "/api/v1/players",
+    "/api/v1/fees",
+    "/api/v1/internal",
 )
 
 
@@ -170,6 +175,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             content["errors"] = {field: [text]}
         return JSONResponse(status_code=status_code, content=content)
 
+    @application.exception_handler(FeeNotFoundError)
+    async def fee_not_found(request: Request, error: FeeNotFoundError) -> JSONResponse:
+        return message(404, "Taxa não encontrada.")
+
+    @application.exception_handler(FeeAlreadyPaidError)
+    async def fee_paid(request: Request, error: FeeAlreadyPaidError) -> JSONResponse:
+        return message(409, "Esta taxa já foi paga.")
+
     @application.exception_handler(CourtNotFoundError)
     async def court_not_found(request: Request, error: CourtNotFoundError) -> JSONResponse:
         return message(404, "Quadra não encontrada.")
@@ -265,6 +278,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(bookings_router)
     application.include_router(schedule_router)
     application.include_router(notifications_router)
+    application.include_router(fees_router)
     return application
 
 

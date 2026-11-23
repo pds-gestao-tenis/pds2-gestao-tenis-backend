@@ -1,10 +1,11 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -170,3 +171,41 @@ class CourtMaintenanceModel(Base):
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     reason: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MemberFeeModel(Base):
+    """US19-US22: taxa cobrada de um membro do clube."""
+
+    __tablename__ = "member_fees"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_member_fees_amount_positive"),
+        CheckConstraint("status IN ('pending', 'paid')", name="ck_member_fees_status"),
+        CheckConstraint(
+            "payment_method IS NULL OR payment_method IN ('cash', 'pix', 'card', 'transfer')",
+            name="ck_member_fees_payment_method",
+        ),
+        CheckConstraint(
+            "paid_via IS NULL OR paid_via IN ('admin', 'online')", name="ck_member_fees_paid_via"
+        ),
+        CheckConstraint(
+            "(status = 'paid') = (paid_at IS NOT NULL AND payment_method IS NOT NULL "
+            "AND paid_via IS NOT NULL)",
+            name="ck_member_fees_paid_fields",
+        ),
+        Index("ix_member_fees_member_status", "member_id", "status"),
+        Index("ix_member_fees_status_due_date", "status", "due_date"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    member_id: Mapped[int] = mapped_column(ForeignKey("members.id", ondelete="CASCADE"))
+    description: Mapped[str] = mapped_column(String(120))
+    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    due_date: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(10), server_default="pending")
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payment_method: Mapped[str | None] = mapped_column(String(10))
+    paid_via: Mapped[str | None] = mapped_column(String(10))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

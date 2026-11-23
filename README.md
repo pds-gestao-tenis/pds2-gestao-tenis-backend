@@ -70,6 +70,26 @@ agendados precisam ser habilitados na aba Actions.
 | `REMINDER_HOURS_BEFORE` | Antecedência do lembrete, em horas |
 | `CRON_TOKEN` | Token da rota de lembretes |
 
+## Taxas e pagamentos (US19-US22)
+
+Cada taxa pertence a um cadastro de membro (US03). O jogador vê as taxas do membro que tem o
+mesmo e-mail da conta dele. "Atrasada" = pendente com vencimento antes de hoje, no fuso do clube.
+
+| Endpoint | Quem | Descrição |
+|---|---|---|
+| `POST /fees` | Admin | Lança uma taxa: `member_id`, `description`, `amount`, `due_date` |
+| `GET /fees` | Admin | Lista por vencimento; filtros `member_id`, `status`, `overdue=true` |
+| `PATCH /fees/{id}` | Admin | Corrige descrição, valor ou vencimento (só pendentes) |
+| `DELETE /fees/{id}` | Admin | Exclui (só pendentes) |
+| `POST /fees/{id}/payment` | Admin | Registra pagamento recebido: `method` (`cash`, `pix`, `card`, `transfer`) e `paid_at` opcional |
+| `GET /fees/pending-members` | Admin | Membros com pendências: quantidade, total, atrasadas e vencimento mais antigo |
+| `GET /fees/mine` | Jogador | Taxas pagas e pendentes da própria conta, com totais |
+| `POST /fees/mine/{id}/pay` | Jogador | Paga uma taxa própria por `pix` ou `card` |
+
+O pagamento pelo sistema ainda não usa um provedor de pagamentos: ele é aprovado na hora e fica
+registrado como `paid_via: "online"`. A integração com um gateway entra em `PayOwnFeeHandler`
+(`app/handlers/fees.py`).
+
 ## Organização
 
 ```text

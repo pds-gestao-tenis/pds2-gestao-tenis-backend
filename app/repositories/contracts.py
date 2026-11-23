@@ -1,10 +1,11 @@
 from collections.abc import Sequence
 from contextlib import AbstractContextManager
-from datetime import datetime
+from datetime import date, datetime
 from typing import Protocol
 
 from app.data.bookings import BookingFilters, NewBookingData
 from app.data.courts import CreateCourtData, MaintenanceData, UpdateCourtData
+from app.data.fees import CreateFeeData, FeeFilters, PaymentData, UpdateFeeData
 from app.data.members import CreateMemberData, UpdateMemberData
 from app.domain.entities import (
     Attendance,
@@ -16,9 +17,13 @@ from app.domain.entities import (
     Contact,
     Court,
     CourtPage,
+    Fee,
+    FeeMember,
+    FeePage,
     Member,
     MemberPage,
     MemberStatus,
+    PendingMember,
     Person,
     ScheduleBooking,
     User,
@@ -155,3 +160,27 @@ class BookingRepository(Protocol):
     def due_for_reminder(self, starts_from: datetime, starts_to: datetime) -> Sequence[int]: ...
 
     def mark_reminded(self, booking_ids: Sequence[int], sent_at: datetime) -> None: ...
+
+
+class FeeRepository(Protocol):
+    def member_exists(self, member_id: int) -> bool: ...
+
+    def member_by_email(self, email: str) -> FeeMember | None: ...
+
+    def create(self, data: CreateFeeData) -> Fee: ...
+
+    def get(self, fee_id: int, *, lock: bool = False) -> Fee | None: ...
+
+    def list(self, filters: FeeFilters, *, page: int, page_size: int) -> FeePage: ...
+
+    def for_member(self, member_id: int) -> Sequence[Fee]: ...
+
+    def update(self, fee_id: int, data: UpdateFeeData) -> Fee: ...
+
+    def pay(self, fee_id: int, data: PaymentData) -> Fee: ...
+
+    def delete(self, fee_id: int) -> None: ...
+
+    def pending_members(self, today: date) -> Sequence[PendingMember]: ...
+
+    def commit(self) -> None: ...
