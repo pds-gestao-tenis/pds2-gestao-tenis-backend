@@ -58,7 +58,8 @@ fica no log e não afeta a reserva. Sem `RESEND_API_KEY`, os e-mails só aparece
 
 Os lembretes saem pela rota interna `POST /api/v1/internal/reminders`, que exige o cabeçalho
 `X-Cron-Token` igual a `CRON_TOKEN` e envia um único lembrete por horário (remarcar gera um novo). O
-workflow `.github/workflows/reminders.yml` chama a rota a cada 15 minutos; ele precisa do secret
+workflow `.github/workflows/reminders.yml` chama a rota de hora em hora, das 07h às 22h de Brasília
+(assim a API dorme de madrugada e poupa as horas gratuitas do Render); ele precisa do secret
 `CRON_TOKEN` e, se a API não estiver no endereço padrão, da variável `API_URL`. Em forks, workflows
 agendados precisam ser habilitados na aba Actions.
 

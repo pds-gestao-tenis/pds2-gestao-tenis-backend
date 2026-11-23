@@ -1,10 +1,12 @@
 name: Lembretes de reservas
 
-# US18: a cada 15 minutos pede à API que envie os lembretes das reservas que começam em breve.
+# US18: de hora em hora, das 07h às 22h de Brasília, pede à API que envie os lembretes das reservas
+# que começam em breve. Como o lembrete sai 24 h antes, uma vez por hora basta; de madrugada a API
+# fica dormindo, o que poupa as horas gratuitas do Render (a chamada acorda o serviço).
 # A chamada também acorda o serviço no plano gratuito do Render.
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "0 10-23,0-1 * * *" # UTC: 10h-01h = 07h-22h em Brasília (UTC-3)
   workflow_dispatch:
 
 jobs:
